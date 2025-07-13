@@ -142,6 +142,4 @@ class FlowOpsRecoverWithTest extends AnyFlatSpec with Matchers:
     }
     caught.getCause shouldBe an[RuntimeException]
     caught.getCause.getMessage shouldBe "recovery failed"
-
-
 end FlowOpsRecoverWithTest
