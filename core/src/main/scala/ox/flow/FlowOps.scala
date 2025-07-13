@@ -1020,7 +1020,7 @@ class FlowOps[+T]:
    * @param pf
    * A partial function that handles specific exceptions and returns a recovery flow to emit.
    * @return
-   * A flow that emits elements from the upstream flow, and emits a recovery value if the upstream fails with a handled exception.
+   * A flow that emits elements from the upstream flow, and emits a recovery flow if the upstream fails with a handled exception.
    */
   def recoverWith[U >: T](pf: PartialFunction[Throwable, Flow[U]])(using BufferCapacity): Flow[U] =
     recoverCommon(pf)
