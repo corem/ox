@@ -987,6 +987,18 @@ class FlowOps[+T]:
     */
   def retry(schedule: Schedule): Flow[T] = retry(RetryConfig(schedule))
 
+  private def recoverCommon[U >: T](pf: PartialFunction[Throwable, Flow[U]])(using BufferCapacity): Flow[U] = Flow.usingEmitInline: emit =>
+    val ch = BufferCapacity.newChannel[U]
+    unsupervised:
+      forkPropagate(ch) {
+        try last.run(FlowEmit.fromInline(t => ch.send(t)))
+        catch case e: Throwable if pf.isDefinedAt(e) =>
+          pf(e).runToEmit(FlowEmit.fromInline(t => ch.send(t)))
+        ch.done()
+      }.discard
+      FlowEmit.channelToEmit(ch, emit)
+
+
   /** Recovers from errors in the upstream flow by emitting a recovery value when the error is handled by the partial function. If the
     * partial function is not defined for the error, the original error is propagated.
     *
@@ -997,15 +1009,21 @@ class FlowOps[+T]:
     * @return
     *   A flow that emits elements from the upstream flow, and emits a recovery value if the upstream fails with a handled exception.
     */
-  def recover[U >: T](pf: PartialFunction[Throwable, U])(using BufferCapacity): Flow[U] = Flow.usingEmitInline: emit =>
-    val ch = BufferCapacity.newChannel[U]
-    unsupervised:
-      forkPropagate(ch) {
-        try last.run(FlowEmit.fromInline(t => ch.send(t)))
-        catch case e: Throwable if pf.isDefinedAt(e) => ch.send(pf(e))
-        ch.done()
-      }.discard
-      FlowEmit.channelToEmit(ch, emit)
+  def recover[U >: T](pf: PartialFunction[Throwable, U])(using BufferCapacity): Flow[U] =
+    recoverCommon(pf.andThen(u => Flow.fromValues(u)))
+
+  /** Recovers from errors in the upstream flow by emitting a recovery flow when the error is handled by the partial function. If the
+   * partial function is not defined for the error, the original error is propagated.
+   *
+   * Creates an asynchronous boundary (see [[buffer]]) to isolate failures when running the upstream flow.
+   *
+   * @param pf
+   * A partial function that handles specific exceptions and returns a recovery flow to emit.
+   * @return
+   * A flow that emits elements from the upstream flow, and emits a recovery value if the upstream fails with a handled exception.
+   */
+  def recoverWith[U >: T](pf: PartialFunction[Throwable, Flow[U]])(using BufferCapacity): Flow[U] =
+    recoverCommon(pf)
 
   //
 
